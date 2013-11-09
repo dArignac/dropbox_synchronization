@@ -21,7 +21,8 @@ class Tx_DropboxSynchronization_UserFunction_AuthorizationCallback {
 
         $this->dropboxService->authorizeRequest(
             $configuration['dropbox_api.']['key'],
-            $configuration['dropbox_api.']['secret']
+            $configuration['dropbox_api.']['secret'],
+            $configuration['dropbox_api.']['authorizationCode']
         );
     }
 }

@@ -2,7 +2,20 @@
 
 class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Core\SingletonInterface {
 
-    public function authorizeRequest($key, $secret) {
+    /**
+      * @var Tx_Extbase_Configuration_ConfigurationManagerInterface
+      */
+     protected $configurationManager;
+
+     /**
+      * @param Tx_Extbase_Configuration_ConfigurationManagerInterface $configurationManager
+      * @return void
+      */
+     public function injectConfigurationManager(Tx_Extbase_Configuration_ConfigurationManagerInterface $configurationManager) {
+         $this->configurationManager = $configurationManager;
+     }
+
+    public function authorizeRequest($key, $secret, $authorizationCode=null) {
         require_once \TYPO3\CMS\Core\Utility\ExtensionManagementUtility::extPath('dropbox_synchronization') . 'Library/Dropbox/autoload.php';
 
         // according to https://www.dropbox.com/developers/core/start/php, mapped to TYPO3
@@ -10,12 +23,23 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
         $webAuth = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('\Dropbox\WebAuthNoRedirect', $appInfo, "TYPO3");
         $authorizeURL = $webAuth->start();
 
-        echo "To authorize Dropbox access for your app, please open the link at the end of the page and authorize.<br /><br />";
-        echo "Copy the authorization code and set it to TypoScript:<br /><br />";
+        echo "To authorize Dropbox access for your app, please open this link and authorize.<br />";
+        echo "The Link: <a href='" . $authorizeURL . "'>" . $authorizeURL . "</a><br /><br />";
+        echo "Copy the authorization code and set it to the TypoScript setup of this page:<br />";
         echo "<pre>";
-        echo "plugin.tx_dropboxsynchronization.settings.authorizationCode = THE_CODE";
-        echo "</pre><br />";
-        echo "Afterwards disable the page you're currently viewing!<br /><br />";
-        echo "The Link: <a href='" . $authorizeURL . "'>" . $authorizeURL . "</a><br />";
+        echo "page.123456789.dropbox_api.authorizationCode = THE_CODE";
+        echo "</pre>";
+        echo "<br />Afterwards reload this page!<br /><br />";
+
+        if (null != $authorizationCode) {
+            list($accessToken, $dropboxUserId) = $webAuth->finish($authorizationCode);
+
+            echo "<p style='color:green;'>";
+            echo "Dropbox synchronizations setup finished!<br />";
+            echo "Finally set this accessToken to your general page TypoScript setup for the extension and disable this page:<br />";
+            echo "<pre>plugin.tx_dropboxsynchronization.settings.accessToken = " . $accessToken . "</pre>";
+            echo "</p>";
+        }
+
     }
 }
