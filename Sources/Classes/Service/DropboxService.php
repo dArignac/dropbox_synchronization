@@ -3,18 +3,11 @@
 class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Core\SingletonInterface {
 
     /**
-      * @var Tx_Extbase_Configuration_ConfigurationManagerInterface
-      */
-     protected $configurationManager;
-
-     /**
-      * @param Tx_Extbase_Configuration_ConfigurationManagerInterface $configurationManager
-      * @return void
-      */
-     public function injectConfigurationManager(Tx_Extbase_Configuration_ConfigurationManagerInterface $configurationManager) {
-         $this->configurationManager = $configurationManager;
-     }
-
+     * Will authorize a dropbox app to access a dropbox account.
+     * @param $key
+     * @param $secret
+     * @param null $authorizationCode
+     */
     public function authorizeRequest($key, $secret, $authorizationCode=null) {
         require_once \TYPO3\CMS\Core\Utility\ExtensionManagementUtility::extPath('dropbox_synchronization') . 'Library/Dropbox/autoload.php';
 
@@ -40,6 +33,15 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
             echo "<pre>plugin.tx_dropboxsynchronization.settings.accessToken = " . $accessToken . "</pre>";
             echo "</p>";
         }
-
     }
+
+    /**
+     * Will synchronize the configured folder with the Dropbox content.
+     * @return bool
+     */
+    public function synchronize() {
+        // TODO implement
+        return true;
+    }
+
 }
