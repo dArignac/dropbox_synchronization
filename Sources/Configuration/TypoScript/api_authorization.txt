@@ -1,7 +1,7 @@
 # Workflow:
 # - create a new page
 # - add a new root template to the page, with the TypoScript below in the setup part
-# - open the page, follow instructions
+# - open the page, follow instructions (https://yourdomain.com/index.php?id=<PID>&type=123456789)
 # - disable/delete the new page
 page = PAGE
 page {
