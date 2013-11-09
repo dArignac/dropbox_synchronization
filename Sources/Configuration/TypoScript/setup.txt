@@ -1,1 +1,6 @@
-plugin.tx_dropboxsynchronization.settings.authorizationCode = THE_CODE
+plugin.tx_dropboxsynchronization {
+    settings {
+        accessToken = THE_CODE
+        syncFolder = fileadmin/user_upload/dropbox
+    }
+}
