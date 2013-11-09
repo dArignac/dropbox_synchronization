@@ -9,10 +9,19 @@ class Tx_DropboxSynchronization_UserFunction_AuthorizationCallback {
      */
     public $dropboxService;
 
+    /**
+     * Will authenticate your dropbox app.
+     * @param $content
+     * @param $configuration
+     */
     public function respond($content, $configuration) {
         if ($this->dropboxService == null) {
             $this->dropboxService = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_DropboxSynchronization_Service_DropboxService');
         }
-        echo "Tx_DropboxSynchronization_UserFunction_AuthorizationCallback";
+
+        $this->dropboxService->authorizeRequest(
+            $configuration['dropbox_api.']['key'],
+            $configuration['dropbox_api.']['secret']
+        );
     }
 }

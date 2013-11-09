@@ -1,0 +1,22 @@
+# Workflow:
+# - create a new page
+# - add a new root template to the page, with the TypoScript below in the setup part
+# - open the page, follow instructions
+# - disable/delete the new page
+page = PAGE
+page {
+	typeNum = 123456789
+	config {
+		no_cache = 1
+		disableAllHeaderCode = 1
+	}
+	headerData >
+	123456789 = USER_INT
+	123456789 {
+		userFunc = Tx_DropboxSynchronization_UserFunction_AuthorizationCallback->respond
+		dropbox_api {
+		    key = pl8mo6eqxgz6m4s
+		    secret = botvb1rg2tabfwp
+		}
+	}
+}
