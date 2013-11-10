@@ -109,9 +109,16 @@ First, insert the TypoScript setup as include in your page template and/or confi
         }
     }
 
-TODO
-Scheduler
+
+Then add a new scheduled task in TYPO3 backend (needs system extension *scheduler* to be installed) with Class *Dropbox Synchronization Task*.
+...and you're set up!
+
+Issues and Contact
+~~~~~~~~~~~~~~~~~~
+
+If you find bugs or have questions, please `leave an issue on Github`_.
 
 
 
 .. _register a new app at Dropbox: https://www.dropbox.com/developers/apps/create
+.. _leave an issue on Github: https://github.com/dArignac/dropbox_synchronization/issues
