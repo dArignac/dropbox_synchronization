@@ -17,6 +17,12 @@ It does not synchronize *multiple* folder or *folders within the app folder*.
 Getting started
 ~~~~~~~~~~~~~~~
 
+Download and Install
+--------------------
+
+Download the extension from `TYPO3 Extension Repository`_ and install it. Or install directly from within the TYPO3 extension manager.
+The extension key is *dropbox_synchronization*.
+
 Create a Dropbox app
 --------------------
 
@@ -119,6 +125,6 @@ Issues and Contact
 If you find bugs or have questions, please `leave an issue on Github`_.
 
 
-
+.. _TYPO3 Extension Repository: http://typo3.org/extensions/repository/view/dropbox_synchronization
 .. _register a new app at Dropbox: https://www.dropbox.com/developers/apps/create
 .. _leave an issue on Github: https://github.com/dArignac/dropbox_synchronization/issues
