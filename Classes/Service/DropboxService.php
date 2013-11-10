@@ -21,7 +21,7 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
     /**
      * @var \TYPO3\CMS\Extbase\Configuration\ConfigurationManagerInterface
      */
-    public $configurationManager;
+    protected $configurationManager;
 
     /**
      * Injects the configuration manager
@@ -70,6 +70,11 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
     private function loadTypoScript() {
         $configuration = $this->configurationManager->getConfiguration(\TYPO3\CMS\Extbase\Configuration\ConfigurationManagerInterface::CONFIGURATION_TYPE_FULL_TYPOSCRIPT);
         $this->configuration = $configuration['plugin.']['tx_dropboxsynchronization.']['settings.'];
+
+        // if feupload is configured additionally fetch the feupload folder
+        if (array_key_exists('feupload.', $this->configuration)) {
+            $this->configuration['feupload_path'] = $configuration['plugin.']['tx_feupload.']['file.']['path'];
+        }
     }
 
     /**
@@ -116,6 +121,7 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
      * Uploads the given files to Dropbox.
      * @param $folder
      * @param $files
+     * @return array
      */
     private function uploadFiles($folder, $files) {
         $results = array();
@@ -134,12 +140,15 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
 
         // write success/fail states to syslog
         $this->logTransfers('Upload', $results);
+
+        return $results;
     }
 
     /**
      * Download the given files to the configured folder.
      * @param $folder
      * @param $files
+     * @return array
      */
     private function downloadFiles($folder, $files) {
         $results = array();
@@ -158,6 +167,8 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
 
         // write success/fail states to syslog
         $this->logTransfers('Download', $results);
+
+        return $results;
     }
 
     /**
@@ -172,6 +183,62 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
                 $this->extensionKey
             );
         }
+    }
+
+    /**
+     * Checks if the given string starts with the given needle.
+     * @see http://stackoverflow.com/a/10473026
+     * @param $haystack
+     * @param $needle
+     * @return bool
+     */
+    private function startsWith($haystack, $needle) {
+        return $needle === "" || strpos($haystack, $needle) === 0;
+    }
+
+    /**
+     * Synchronizes the files currently synced with Dropbox also with feupload.
+     * @param $folder
+     * @param $files
+     */
+    private function syncWithFeUploadExtension($folder, $files) {
+        // instantiate the feupload repos
+        $repoFiles = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Feupload_Domain_Repository_FileRepository');
+        $repoUser = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Feupload_Domain_Repository_FrontendUserRepository');
+        $repoUserGroups = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Feupload_Domain_Repository_FrontendUserGroupRepository');
+
+        // fetch the user groups the files should be assigned to
+        $groups = array();
+        foreach (explode(',', $this->configuration['feupload.']['initialGroups']) as $groupId) {
+            $group = $repoUserGroups->findByUid($groupId);
+            if (null != $group) {
+                $groups[] = $group;
+            }
+        }
+
+        // some path magic, get the path of dropbox folder within feupload folder
+        $pathDropboxRelative = str_replace(PATH_site, '', $folder);
+        $pathDropboxRelative = str_replace($this->configuration['feupload_path'], '', $pathDropboxRelative);
+
+        foreach ($files as $file => $state) {
+            if ($state) {
+                // check if this file already exists in DB
+                $fileInstance = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Feupload_Domain_Model_File');
+                $fileInstance->setFile($pathDropboxRelative . ($this->startsWith($file, '/') ? $file : '/' . $file));
+                $fileInstance->setTitle($this->startsWith($file, '/') ? substr($file, 1) : $file);
+                $fileInstance->setVisibility($this->configuration['feupload.']['visibility']);
+                $fileInstance->setPid($this->configuration['feupload.']['storagePid']);
+                $fileInstance->setOwner($repoUser->findByUid($this->configuration['feupload.']['userId']));
+                foreach ($groups as $group) {
+                    $fileInstance->addFrontendUserGroup($group);
+                }
+                $repoFiles->add($fileInstance);
+            }
+        }
+
+        // write to db
+        $persistenceManager = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Extbase_Persistence_Manager');
+        $persistenceManager->persistAll();
     }
 
     /**
@@ -207,8 +274,13 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
         }
 
         // do the synchronization
-        $this->uploadFiles($folderLocal, $filesToUpload);
-        $this->downloadFiles($folderLocal, $fileToDownload);
+        $uploadedFiles = $this->uploadFiles($folderLocal, $filesToUpload);
+        $downloadedFiles = $this->downloadFiles($folderLocal, $fileToDownload);
+
+        // if the felogin part is enabled, sync the files to this extension
+        if (array_key_exists('feupload.', $this->configuration)) {
+            $this->syncWithFeUploadExtension($folderLocal, array_merge($uploadedFiles, $downloadedFiles));
+        }
 
         // we will never fail!
         return true;

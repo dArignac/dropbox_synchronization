@@ -2,5 +2,12 @@ plugin.tx_dropboxsynchronization {
     settings {
         accessToken = ACCESS_TOKEN
         syncFolder = fileadmin/user_upload/dropbox
+#        feupload {
+#            storagePid < plugin.tx_feupload.persistence.storagePid
+#            initialGroups = 1,2,3
+#            userId = 1
+#            # see feupload: 0 - public, -2 - logged in users, 1 - groups
+#            visibility = 1
+#        }
     }
 }

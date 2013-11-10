@@ -30,10 +30,10 @@ First, `register a new app at Dropbox`_ and note the app key and secret.
 It should be a *Dropbox API app* with *Files and datastores* and you probably want to limit it to its own private folder:
 
 .. image:: dropbox_app.png
-    :scale: 50%
+:scale: 50%
     :alt: Dropbox app creation
 
-This app will be used to access the files of a Dropbox account.
+    This app will be used to access the files of a Dropbox account.
 
 Authorize the App
 -----------------
@@ -118,6 +118,39 @@ First, insert the TypoScript setup as include in your page template and/or confi
 
 Then add a new scheduled task in TYPO3 backend (needs system extension *scheduler* to be installed) with Class *Dropbox Synchronization Task*.
 ...and you're set up!
+
+
+feupload Integration
+~~~~~~~~~~~~~~~~~~~~
+
+The extension supports the integration of the *feupload* extension.
+
+**Important:** if using with *feupload* the Dropbox folder has to be inside the *feupload* folder (e.g. uploads/feupload/dropbox)
+
+To activate the integration, set the following TypoScript:
+
+::
+
+    plugin.tx_dropboxsynchronization {
+        settings {
+            # access token of dropbox
+            accessToken = ACCESS_TOKEN
+            # the folder to synchronize
+            syncFolder = fileadmin/user_upload/dropbox
+            feupload {
+                # where feupload files are stored
+                storagePid < plugin.tx_feupload.persistence.storagePid
+                # initial groups to assign to synchronized files
+                initialGroups = 1,2,3
+                # the UID of the user who shall be set as owner of the files
+                userId = 1
+                # visibility of files
+                # see feupload: 0 - public, -2 - logged in users, 1 - groups
+                visibility = 1
+            }
+        }
+    }
+
 
 Issues and Contact
 ~~~~~~~~~~~~~~~~~~
