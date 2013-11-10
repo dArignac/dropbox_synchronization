@@ -15,8 +15,8 @@ page {
 	123456789 {
 		userFunc = Tx_DropboxSynchronization_UserFunction_AuthorizationCallback->respond
 		dropbox_api {
-		    key = pl8mo6eqxgz6m4s
-		    secret = botvb1rg2tabfwp
+		    key = APP_KEY
+		    secret = APP_SECRET
 		}
 	}
 }
