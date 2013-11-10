@@ -2,7 +2,17 @@ dropbox_synchronization
 =======================
 
 This TYPO3 extensions synchronizes a Dropbox app folder with a TYPO3 installation.
-Currently you can only synchronize a single folder.
+
+What does it do?
+~~~~~~~~~~~~~~~~
+
+The extension synchronizes *files* of a specific app folder.
+**Short: the files of a single folder**
+
+What does it not do?
+~~~~~~~~~~~~~~~~~~~~
+
+It does not synchronize *multiple* folder or *folders within the app folder*.
 
 Getting started
 ~~~~~~~~~~~~~~~
@@ -85,6 +95,19 @@ Now delete or disable the authorization page you just created.
 
 Synchronizing the files
 -----------------------
+
+First, insert the TypoScript setup as include in your page template and/or configure your TypoScript with the values below.
+
+::
+
+    plugin.tx_dropboxsynchronization {
+        settings {
+            # access token of dropbox
+            accessToken = ACCESS_TOKEN
+            # the folder to synchronize
+            syncFolder = fileadmin/user_upload/dropbox
+        }
+    }
 
 TODO
 Scheduler

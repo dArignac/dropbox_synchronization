@@ -1,6 +1,6 @@
 plugin.tx_dropboxsynchronization {
     settings {
-        accessToken = THE_CODE
+        accessToken = ACCESS_TOKEN
         syncFolder = fileadmin/user_upload/dropbox
     }
 }
