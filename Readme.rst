@@ -1,15 +1,95 @@
-Extension Manual
-=================
+dropbox_synchronization
+=======================
 
-This is a template manual aiming to pave the way to developers when it comes about documentation. The template provides a structure that a developer can take over and, in addition, many useful snippets and examples. Documentation is written in reST format. Refer to Help writing reStructuredText to get some more insight about the syntax and available reST editors. For instance, you might be particularly interested how you can :
+This TYPO3 extensions synchronizes a Dropbox app folder with a TYPO3 installation.
+Currently you can only synchronize a single folder.
 
-* generate the documentation using on-line services (@todo to write) 
-* `make links`_ accros projects
-* how you should write TypoScript reference.
+Getting started
+~~~~~~~~~~~~~~~
 
-Any idea or suggestion for improving this template `can be drop`_ to our team_. And remember: documentation is like gift wrapping, it looks like superfluous, but your friend tends to be rather disappointed when their presents arrive in supermarket carrier bags. (Documentation-Driven Design quote)
+Create a Dropbox app
+--------------------
 
-.. _can be drop: http://forge.typo3.org/projects/typo3v4-official_extension_template/issues
-.. _team: http://forge.typo3.org/projects/typo3v4-official_extension_template
-.. _make links: RestructuredtextHelp.html#cross-linking
-.. _can write TypoScript: RestructuredtextHelp.html#typoscript-reference
+First, `register a new app at Dropbox`_ and note the app key and secret.
+It should be a *Dropbox API app* with *Files and datastores* and you probably want to limit it to its own private folder:
+
+.. image:: dropbox_api.png
+    :scale: 60%
+    :alt: Dropbox app creation
+    :align: left
+
+This app will be used to access the files of a Dropbox account.
+
+Authorize the App
+-----------------
+
+Next, you have to authorize the newly created app to access your Dropbox files.
+Therefore create a new TYPO3 page and add a new root template with the following TypoScript setup content (also see file github.com/dArignac/dropbox_synchronization/blob/master/Configuration/TypoScript/api_authorization.txt):
+
+::
+
+    # Workflow:
+    # - create a new page
+    # - add a new root template to the page, with the TypoScript below in the setup part
+    # - open the page, follow instructions (https://yourdomain.com/index.php?id=<PID>&type=123456789)
+    # - disable/delete the new page
+    page = PAGE
+    page {
+	      typeNum = 123456789
+        config {
+            no_cache = 1
+            disableAllHeaderCode = 1
+        }
+        headerData >
+        123456789 = USER_INT
+        123456789 {
+            userFunc = Tx_DropboxSynchronization_UserFunction_AuthorizationCallback->respond
+            dropbox_api {
+                key = APP_KEY
+                secret = APP_SECRET
+            }
+        }
+    }
+
+Afterwards open the page (https://yourdomain.com/index.php?id=<PID>&type=123456789) and click the Dropbox link. Dropbox asks you to authorize the app, accept it and note the authorization code.
+Set this code to the TypoScript setup of the newly created page and reload the page:
+
+::
+
+    page {
+	      typeNum = 123456789
+        ...
+        123456789 = USER_INT
+        123456789 {
+            ...
+            dropbox_api {
+                key = APP_KEY
+                secret = APP_SECRET
+                authorizationCode = AUTHORIZATION_CODE
+            }
+        }
+    }
+
+Then refresh the page and copy the TypoScript setup code marked in green into your default page TypoScript setup (not the setup of the newly created page):
+
+::
+
+    plugin.tx_dropboxsynchronization.settings.accessToken = ACCESS_TOKEN
+
+
+What did just happen? The extension called Dropbox with the authorization code and the app credentials. Dropbox then created an access token. This token will be used to authenticate all calls of the TYPO3 extension to Dropbox.
+
+**Important:** You have to be quick with settings the *authorizationCode* and reloading the page, the code is valid for about 5 minutes!
+
+Now delete or disable the authorization page you just created.
+
+
+Synchronizing the files
+-----------------------
+
+TODO
+Scheduler
+
+
+
+.. _register a new app at Dropbox: https://www.dropbox.com/developers/apps/create
