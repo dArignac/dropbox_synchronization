@@ -12,22 +12,22 @@
 
 $EM_CONF[$_EXTKEY] = array(
 	'title' => 'Dropbox Synchronization',
-	'description' => '',
+	'description' => 'Synchronizes a Dropbox folder with a local TYPO3 folder.',
 	'category' => 'misc',
-	'author' => '',
-	'author_email' => '',
+	'author' => 'Alexander Herrmann',
+	'author_email' => 'typo3@amnell.de',
 	'author_company' => '',
 	'shy' => '',
 	'priority' => '',
 	'module' => '',
-	'state' => 'alpha',
+	'state' => 'beta',
 	'internal' => '',
 	'uploadfolder' => '0',
 	'createDirs' => '',
 	'modify_tables' => '',
 	'clearCacheOnLoad' => 0,
 	'lockType' => '',
-	'version' => '0.0.1',
+	'version' => '0.1.0',
 	'constraints' => array(
 		'depends' => array(
 			'extbase' => '6.0',
@@ -40,5 +40,3 @@ $EM_CONF[$_EXTKEY] = array(
 		),
 	),
 );
-
-?>
