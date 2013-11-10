@@ -13,10 +13,9 @@ Create a Dropbox app
 First, `register a new app at Dropbox`_ and note the app key and secret.
 It should be a *Dropbox API app* with *Files and datastores* and you probably want to limit it to its own private folder:
 
-.. image:: dropbox_api.png
-    :scale: 60%
+.. image:: dropbox_app.png
+    :scale: 50%
     :alt: Dropbox app creation
-    :align: left
 
 This app will be used to access the files of a Dropbox account.
 
