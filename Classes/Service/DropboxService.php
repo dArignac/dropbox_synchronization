@@ -1,12 +1,16 @@
 <?php
 
+/**
+ * Dropbox Synchronization Service.
+ * Class Tx_DropboxSynchronization_Service_DropboxService
+ */
 class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Core\SingletonInterface {
 
     /**
-     * Client identifier for \Dropbox\Client calls.
+     * The extension key.
      * @var string
      */
-    private $dropboxClientIdentifier = "TYPO3/dropbox_synchronization";
+    private $extensionKey = 'dropbox_synchronization';
 
     /**
      * Will contain the TypoScript configuration if injected.
@@ -37,6 +41,14 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
     }
 
     /**
+     * Returns the client identifier for \Dropbox\Client calls.
+     * @return string
+     */
+    private function getClientIdentifier() {
+        return 'TYPO3/' . $this->extensionKey;
+    }
+
+    /**
      * Returns a Dropbox client instance.
      * @return \Dropbox\Client
      * @throws Exception
@@ -45,7 +57,11 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
         if (null == $this->configuration) {
             throw new \Exception('EXT:dropbox_synchronization: no TypoScript injected!');
         }
-        return \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('\Dropbox\Client', $this->configuration['accessToken'], $this->dropboxClientIdentifier);
+        return \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance(
+            '\Dropbox\Client',
+            $this->configuration['accessToken'],
+            $this->getClientIdentifier()
+        );
     }
 
     /**
@@ -64,6 +80,138 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
         if (!is_dir($folder)) {
             \TYPO3\CMS\Core\Utility\GeneralUtility::mkdir_deep($folder);
         }
+    }
+
+    /**
+     * Returns all local files from the given folder.
+     * @param $folder
+     * @return array
+     */
+    private function getLocalFiles($folder) {
+        $filesLocal = array();
+        foreach (scandir($folder) as $element) {
+            if (!is_dir($folder . '/' . $element)) {
+                $filesLocal[] = $element;
+            }
+        }
+        return $filesLocal;
+    }
+
+    /**
+     * Returns all remote files.
+     * @return array
+     */
+    private function getRemoteFiles() {
+        $filesRemote = array();
+        $dropboxContent = $this->getClient()->getMetadataWithChildren('/');
+        foreach ($dropboxContent['contents'] as $element) {
+            if (!$element['is_dir']) {
+                $filesRemote[] = $element['path'];
+            }
+        }
+        return $filesRemote;
+    }
+
+    /**
+     * Uploads the given files to Dropbox.
+     * @param $folder
+     * @param $files
+     */
+    private function uploadFiles($folder, $files) {
+        $results = array();
+
+        // upload each file
+        foreach ($files as $file) {
+            try {
+                $fileHandle = fopen($folder . '/' . $file, 'rb');
+                $this->getClient()->uploadFile('/' . $file, \Dropbox\WriteMode::add(), $fileHandle);
+                fclose($fileHandle);
+                $results[$file] = true;
+            } catch (\Dropbox\Exception $e) {
+                $results[$file] = false;
+            }
+        }
+
+        // write success/fail states to syslog
+        $this->logTransfers('Upload', $results);
+    }
+
+    /**
+     * Download the given files to the configured folder.
+     * @param $folder
+     * @param $files
+     */
+    private function downloadFiles($folder, $files) {
+        $results = array();
+
+        // download each file
+        foreach ($files as $file) {
+            try {
+                $fileHandle = fopen($folder . $file, 'w+b');
+                $this->getClient()->getFile($file, $fileHandle);
+                fclose($fileHandle);
+                $results[$file] = true;
+            } catch (\Dropbox\Exception $e) {
+                $results[$file] = false;
+            }
+        }
+
+        // write success/fail states to syslog
+        $this->logTransfers('Download', $results);
+    }
+
+    /**
+     * Logs transfer actions to syslog.
+     * @param $type
+     * @param $results
+     */
+    private function logTransfers($type, $results) {
+        foreach ($results as $file => $state) {
+            \TYPO3\CMS\Core\Utility\GeneralUtility::sysLog(
+                $type . ' of ' . $file . ' ' . ($state ? 'was successfull' : 'failed'),
+                $this->extensionKey
+            );
+        }
+    }
+
+    /**
+     * Will synchronize the configured folder with the Dropbox content.
+     * @return bool
+     */
+    public function synchronize() {
+        // initialize prerequisites
+        $this->loadTypoScript();
+        $folderLocal = PATH_site . $this->configuration['syncFolder'];
+        $this->ensureLocalFolderExistence($folderLocal);
+
+        // get all local files
+        $filesLocal = $this->getLocalFiles($folderLocal);
+        // get all remote files
+        $filesRemote = $this->getRemoteFiles();
+
+
+        // check if there are local files that do not exist remote
+        $filesToUpload = array();
+        foreach ($filesLocal as $file) {
+            if (!in_array("/" . $file, $filesRemote)) {
+                $filesToUpload[] = $file;
+            }
+        }
+
+        // check if there are remote files that do not exist locally
+        $fileToDownload = array();
+        foreach ($filesRemote as $file) {
+            if (!in_array(substr($file, 1), $filesLocal)) {
+                $fileToDownload[] = $file;
+            }
+        }
+
+        // do the synchronization
+        $this->uploadFiles($folderLocal, $filesToUpload);
+        $this->downloadFiles($folderLocal, $fileToDownload);
+
+        // we will never fail!
+        return true;
     }
 
     /**
@@ -97,43 +245,5 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
             echo "<pre>plugin.tx_dropboxsynchronization.settings.accessToken = " . $accessToken . "</pre>";
             echo "</p>";
         }
-    }
-
-    /**
-     * Will synchronize the configured folder with the Dropbox content.
-     * @return bool
-     */
-    public function synchronize() {
-        // initialize prerequisites
-        $this->loadTypoScript();
-        $folderLocal = PATH_site . $this->configuration['syncFolder'];
-        $this->ensureLocalFolderExistence($folderLocal);
-
-        // get all local files
-        $filesLocal = array();
-        foreach (scandir($folderLocal) as $element) {
-            if (!is_dir($folderLocal . '/' . $element)) {
-                $filesLocal[] = $element;
-            }
-        }
-
-        // get all remote files
-        $filesRemote = array();
-        $dropboxContent = $this->getClient()->getMetadataWithChildren("/");
-        foreach ($dropboxContent['contents'] as $element) {
-            if (!$element['is_dir']) {
-                $filesRemote[] = $element['path'];
-            }
-        }
-
-//        var_dump(array($filesLocal, $filesRemote));
-
-        // check if there are local files that do not exist remote
-        // TODO implement
-
-        // check if there are remote files that do not exist locally
-        // TODO implement
-
-        return true;
     }
 }
