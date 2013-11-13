@@ -220,19 +220,27 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
         $pathDropboxRelative = str_replace(PATH_site, '', $folder);
         $pathDropboxRelative = str_replace($this->configuration['feupload_path'], '', $pathDropboxRelative);
 
+        // the feupload file repository is setup kinda weird, let's ensure all queries contain the correct storage pid;
+        $querySettings = $repoFiles->createQuery()->getQuerySettings();
+        $querySettings->setStoragePageIds(array($this->configuration['feupload.']['storagePid']));
+        $repoFiles->setDefaultQuerySettings($querySettings);
+
         foreach ($files as $file => $state) {
             if ($state) {
                 // check if this file already exists in DB
-                $fileInstance = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Feupload_Domain_Model_File');
-                $fileInstance->setFile($pathDropboxRelative . ($this->startsWith($file, '/') ? $file : '/' . $file));
-                $fileInstance->setTitle($this->startsWith($file, '/') ? substr($file, 1) : $file);
-                $fileInstance->setVisibility($this->configuration['feupload.']['visibility']);
-                $fileInstance->setPid($this->configuration['feupload.']['storagePid']);
-                $fileInstance->setOwner($repoUser->findByUid($this->configuration['feupload.']['userId']));
-                foreach ($groups as $group) {
-                    $fileInstance->addFrontendUserGroup($group);
+                $filePath = $pathDropboxRelative . ($this->startsWith($file, '/') ? $file : '/' . $file);
+                if ($repoFiles->countByFile($filePath) == 0) {
+                    $fileInstance = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Feupload_Domain_Model_File');
+                    $fileInstance->setFile($filePath);
+                    $fileInstance->setTitle($this->startsWith($file, '/') ? substr($file, 1) : $file);
+                    $fileInstance->setVisibility($this->configuration['feupload.']['visibility']);
+                    $fileInstance->setPid($this->configuration['feupload.']['storagePid']);
+                    $fileInstance->setOwner($repoUser->findByUid($this->configuration['feupload.']['userId']));
+                    foreach ($groups as $group) {
+                        $fileInstance->addFrontendUserGroup($group);
+                    }
+                    $repoFiles->add($fileInstance);
                 }
-                $repoFiles->add($fileInstance);
             }
         }
 
@@ -256,11 +264,10 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
         // get all remote files
         $filesRemote = $this->getRemoteFiles();
 
-
         // check if there are local files that do not exist remote
         $filesToUpload = array();
         foreach ($filesLocal as $file) {
-            if (!in_array("/" . $file, $filesRemote)) {
+            if (!in_array('/' . $file, $filesRemote)) {
                 $filesToUpload[] = $file;
             }
         }
