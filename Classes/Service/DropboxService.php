@@ -13,6 +13,31 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
     private $useFeupload = false;
 
     /**
+     * The feupload file repository.
+     * @var Tx_Feupload_Domain_Repository_FileRepository
+     */
+    private $feuploadRepoFiles;
+
+    /**
+     * The feupload user repository.
+     * @var Tx_Feupload_Domain_Repository_FrontendUserRepository
+     */
+    private $feuploadRepoUsers;
+
+    /**
+     * The feupload user group repository.
+     * @var Tx_Feupload_Domain_Repository_FrontendUserGroupRepository
+     */
+    private $feuploadRepoUserGroups;
+
+    /**
+     * Array of group ids that will be assigned to feupload files.
+     * Will be instantiated in initialize() method.
+     * @var array
+     */
+    private $feuploadGroups = array();
+
+    /**
      * The extension key.
      * @var string
      */
@@ -120,9 +145,17 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
         // upload each file
         foreach ($files as $file) {
             try {
+                // upload the file
                 $fileHandle = fopen($folder . '/' . $file, 'rb');
                 $this->getClient()->uploadFile('/' . $file, \Dropbox\WriteMode::add(), $fileHandle);
                 fclose($fileHandle);
+
+                // create feupload file if not already existent
+                if ($this->useFeupload) {
+                    $this->feuploadCreateFile($folder, $file);
+                }
+
+                // result
                 $results[$file] = true;
             } catch (\Dropbox\Exception $e) {
                 $results[$file] = false;
@@ -147,9 +180,17 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
         // download each file
         foreach ($files as $file) {
             try {
+                // download the file
                 $fileHandle = fopen($folder . $file, 'w+b');
                 $this->getClient()->getFile($file, $fileHandle);
                 fclose($fileHandle);
+
+                // if feupload integration, create file locally if not existent
+                if ($this->useFeupload) {
+                    $this->feuploadCreateFile($folder, $file);
+                }
+
+                // mark success
                 $results[$file] = true;
             } catch (\Dropbox\Exception $e) {
                 $results[$file] = false;
@@ -172,7 +213,14 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
 
         foreach ($files as $file) {
             try {
+                // delete in Dropbox
                 $this->getClient()->delete($file);
+
+                // delete file from feupload if still existent
+                if ($this->useFeupload) {
+                    $this->feuploadDeleteFile($folder, $file);
+                }
+
                 $results[$file] = true;
             } catch (\Dropbox\Exception $e) {
                 $results[$file] = false;
@@ -209,8 +257,10 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
         foreach ($files as $file) {
             $pathFile = $folder . '/' . $file;
             if (file_exists($pathFile)) {
-                // TODO if feupload integration, first delete feupload record!
-                unlink($pathFile);
+                if ($this->useFeupload) {
+                    $this->feuploadDeleteFile($folder, $file);
+                }
+                @unlink($pathFile);
             }
         }
     }
@@ -234,10 +284,9 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
      */
     public function synchronize() {
         // initialize prerequisites
-        $this->loadTypoScript();
+        $this->initialize();
         $folderTypo3 = PATH_site . $this->configuration['syncFolder'];
         $this->ensureLocalFolderExistence($folderTypo3);
-        $this->useFeupload = array_key_exists('feupload.', $this->configuration);
         $masterSide = $this->configuration['master'];
 
         // get all local files
@@ -277,61 +326,88 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
             $this->downloadFilesFromDropbox($folderTypo3, $fileDiffTypo3['deleted']);
         }
 
+        // finally persist all db changes for feupload
+        if ($this->useFeupload) {
+            $persistenceManager = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Extbase_Persistence_Manager');
+            $persistenceManager->persistAll();
+        }
+
         // we will never fail!
         return true;
     }
 
     /**
-     * Synchronizes the files currently synced with Dropbox also with feupload.
-     * @param $folder
-     * @param $files
+     * Initializes the synchronization variables and stuff.
      */
-    private function syncWithFeUploadExtension($folder, $files) {
-        // instantiate the feupload repos
-        $repoFiles = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Feupload_Domain_Repository_FileRepository');
-        $repoUser = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Feupload_Domain_Repository_FrontendUserRepository');
-        $repoUserGroups = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Feupload_Domain_Repository_FrontendUserGroupRepository');
+    private function initialize() {
+        $this->loadTypoScript();
+        $this->useFeupload = array_key_exists('feupload.', $this->configuration);
 
-        // fetch the user groups the files should be assigned to
-        $groups = array();
-        foreach (explode(',', $this->configuration['feupload.']['initialGroups']) as $groupId) {
-            $group = $repoUserGroups->findByUid($groupId);
-            if (null != $group) {
-                $groups[] = $group;
-            }
-        }
+        // if feupload, initialize all required repos and stuff
+        if ($this->useFeupload) {
+            // instantiate the feupload repos
+            $this->feuploadRepoFiles = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Feupload_Domain_Repository_FileRepository');
+            $this->feuploadRepoUsers = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Feupload_Domain_Repository_FrontendUserRepository');
+            $this->feuploadRepoUserGroups = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Feupload_Domain_Repository_FrontendUserGroupRepository');
 
-        // some path magic, get the path of dropbox folder within feupload folder
-        $pathDropboxRelative = str_replace(PATH_site, '', $folder);
-        $pathDropboxRelative = str_replace($this->configuration['feupload_path'], '', $pathDropboxRelative);
-
-        // the feupload file repository is setup kinda weird, let's ensure all queries contain the correct storage pid;
-        $querySettings = $repoFiles->createQuery()->getQuerySettings();
-        $querySettings->setStoragePageIds(array($this->configuration['feupload.']['storagePid']));
-        $repoFiles->setDefaultQuerySettings($querySettings);
-
-        foreach ($files as $file => $state) {
-            if ($state) {
-                // check if this file already exists in DB
-                $filePath = $pathDropboxRelative . $file;
-                if ($repoFiles->countByFile($filePath) == 0) {
-                    $fileInstance = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Feupload_Domain_Model_File');
-                    $fileInstance->setFile($filePath);
-                    $fileInstance->setTitle(substr($file, 1));
-                    $fileInstance->setVisibility($this->configuration['feupload.']['visibility']);
-                    $fileInstance->setPid($this->configuration['feupload.']['storagePid']);
-                    $fileInstance->setOwner($repoUser->findByUid($this->configuration['feupload.']['userId']));
-                    foreach ($groups as $group) {
-                        $fileInstance->addFrontendUserGroup($group);
-                    }
-                    $repoFiles->add($fileInstance);
+            // fetch the user groups the files should be assigned to
+            foreach (explode(',', $this->configuration['feupload.']['initialGroups']) as $groupId) {
+                $group = $this->feuploadRepoUserGroups->findByUid(trim($groupId));
+                if (null != $group) {
+                    $this->feuploadGroups[] = $group;
                 }
             }
-        }
 
-        // write to db
-        $persistenceManager = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Extbase_Persistence_Manager');
-        $persistenceManager->persistAll();
+            // the feupload file repository is setup kinda weird, let's ensure all queries contain the correct storage pid;
+            $querySettings = $this->feuploadRepoFiles->createQuery()->getQuerySettings();
+            $querySettings->setStoragePageIds(array($this->configuration['feupload.']['storagePid']));
+            $this->feuploadRepoFiles->setDefaultQuerySettings($querySettings);
+        }
+    }
+
+    /**
+     * Returns the relative path of the Dropbox folder within the feupload folder.
+     * @param $folder
+     * @return mixed
+     */
+    private function feuploadGetRelativePath($folder) {
+        $pathDropboxRelative = str_replace(PATH_site, '', $folder);
+        return str_replace($this->configuration['feupload_path'], '', $pathDropboxRelative);
+    }
+
+    /**
+     * Creates the given file as feupload file instance.
+     * @param $folder
+     * @param $file
+     */
+    private function feuploadCreateFile($folder, $file) {
+        $filePath = $this->feuploadGetRelativePath($folder) . $file; // $file contains leading slash
+        // check if this file already exists in DB
+        if ($this->feuploadRepoFiles->countByFile($filePath) == 0) {
+            $fileInstance = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Feupload_Domain_Model_File');
+            $fileInstance->setFile($filePath);
+            $fileInstance->setTitle(substr($file, 1));
+            $fileInstance->setVisibility($this->configuration['feupload.']['visibility']);
+            $fileInstance->setPid($this->configuration['feupload.']['storagePid']);
+            $fileInstance->setOwner($this->feuploadRepoUsers->findByUid($this->configuration['feupload.']['userId']));
+            foreach ($this->feuploadGroups as $group) {
+                $fileInstance->addFrontendUserGroup($group);
+            }
+            $this->feuploadRepoFiles->add($fileInstance);
+        }
+    }
+
+    /**
+     * Deletes the given file from db (feupload).
+     * @param $folder
+     * @param $file
+     */
+    private function feuploadDeleteFile($folder, $file) {
+        $filePath = $this->feuploadGetRelativePath($folder) . $file; // $file contains leading slash
+        if ($this->feuploadRepoFiles->countByFile($filePath) != 0) {
+            $fileInstance = $this->feuploadRepoFiles->findByFile($filePath)->toArray()[0];
+            $this->feuploadRepoFiles->remove($fileInstance);
+        }
     }
 
     /**

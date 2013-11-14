@@ -151,6 +151,8 @@ To activate the integration, set the following TypoScript:
             accessToken = ACCESS_TOKEN
             # the folder to synchronize
             syncFolder = fileadmin/user_upload/dropbox
+            # master side
+            master = none
             feupload {
                 # where feupload files are stored
                 storagePid < plugin.tx_feupload.persistence.storagePid
