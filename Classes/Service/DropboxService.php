@@ -95,8 +95,9 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
     private function getLocalFiles($folder) {
         $filesLocal = array();
         foreach (scandir($folder) as $element) {
+            // TODO join paths system independantly!
             if (!is_dir($folder . '/' . $element)) {
-                $filesLocal[] = $element;
+                $filesLocal[] = '/' . $element;
             }
         }
         return $filesLocal;
@@ -186,17 +187,6 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
     }
 
     /**
-     * Checks if the given string starts with the given needle.
-     * @see http://stackoverflow.com/a/10473026
-     * @param $haystack
-     * @param $needle
-     * @return bool
-     */
-    private function startsWith($haystack, $needle) {
-        return $needle === "" || strpos($haystack, $needle) === 0;
-    }
-
-    /**
      * Synchronizes the files currently synced with Dropbox also with feupload.
      * @param $folder
      * @param $files
@@ -228,11 +218,11 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
         foreach ($files as $file => $state) {
             if ($state) {
                 // check if this file already exists in DB
-                $filePath = $pathDropboxRelative . ($this->startsWith($file, '/') ? $file : '/' . $file);
+                $filePath = $pathDropboxRelative . $file;
                 if ($repoFiles->countByFile($filePath) == 0) {
                     $fileInstance = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('Tx_Feupload_Domain_Model_File');
                     $fileInstance->setFile($filePath);
-                    $fileInstance->setTitle($this->startsWith($file, '/') ? substr($file, 1) : $file);
+                    $fileInstance->setTitle(substr($file, 1));
                     $fileInstance->setVisibility($this->configuration['feupload.']['visibility']);
                     $fileInstance->setPid($this->configuration['feupload.']['storagePid']);
                     $fileInstance->setOwner($repoUser->findByUid($this->configuration['feupload.']['userId']));
@@ -256,37 +246,38 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
     public function synchronize() {
         // initialize prerequisites
         $this->loadTypoScript();
-        $folderLocal = PATH_site . $this->configuration['syncFolder'];
-        $this->ensureLocalFolderExistence($folderLocal);
+        $folderTypo3 = PATH_site . $this->configuration['syncFolder'];
+        $this->ensureLocalFolderExistence($folderTypo3);
+        $useFeupload = array_key_exists('feupload.', $this->configuration);
 
         // get all local files
-        $filesLocal = $this->getLocalFiles($folderLocal);
+        $filesTypo3 = $this->getLocalFiles($folderTypo3);
         // get all remote files
-        $filesRemote = $this->getRemoteFiles();
+        $filesDropbox = $this->getRemoteFiles();
 
         // check if there are local files that do not exist remote
         $filesToUpload = array();
-        foreach ($filesLocal as $file) {
-            if (!in_array('/' . $file, $filesRemote)) {
+        foreach ($filesTypo3 as $file) {
+            if (!in_array($file, $filesDropbox)) {
                 $filesToUpload[] = $file;
             }
         }
 
         // check if there are remote files that do not exist locally
         $fileToDownload = array();
-        foreach ($filesRemote as $file) {
-            if (!in_array(substr($file, 1), $filesLocal)) {
+        foreach ($filesDropbox as $file) {
+            if (!in_array(substr($file, 1), $filesTypo3)) {
                 $fileToDownload[] = $file;
             }
         }
 
         // do the synchronization
-        $uploadedFiles = $this->uploadFiles($folderLocal, $filesToUpload);
-        $downloadedFiles = $this->downloadFiles($folderLocal, $fileToDownload);
+        $uploadedFiles = $this->uploadFiles($folderTypo3, $filesToUpload);
+        $downloadedFiles = $this->downloadFiles($folderTypo3, $fileToDownload);
 
         // if the felogin part is enabled, sync the files to this extension
-        if (array_key_exists('feupload.', $this->configuration)) {
-            $this->syncWithFeUploadExtension($folderLocal, array_merge($uploadedFiles, $downloadedFiles));
+        if ($useFeupload) {
+            $this->syncWithFeUploadExtension($folderTypo3, array_merge($uploadedFiles, $downloadedFiles));
         }
 
         // we will never fail!
