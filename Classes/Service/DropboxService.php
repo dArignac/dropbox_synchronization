@@ -120,7 +120,6 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
         // upload each file
         foreach ($files as $file) {
             try {
-                // TODO join paths system independantly!
                 $fileHandle = fopen($folder . '/' . $file, 'rb');
                 $this->getClient()->uploadFile('/' . $file, \Dropbox\WriteMode::add(), $fileHandle);
                 fclose($fileHandle);
@@ -194,7 +193,6 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
     private function getTypo3Files($folder) {
         $filesLocal = array();
         foreach (scandir($folder) as $element) {
-            // TODO join paths system independantly!
             if (!is_dir($folder . '/' . $element)) {
                 $filesLocal[] = '/' . $element;
             }
@@ -209,7 +207,6 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
      */
     private function deleteFilesInTypo3($folder, $files) {
         foreach ($files as $file) {
-            // TODO join paths system independantly!
             $pathFile = $folder . '/' . $file;
             if (file_exists($pathFile)) {
                 // TODO if feupload integration, first delete feupload record!
