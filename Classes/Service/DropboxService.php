@@ -7,6 +7,12 @@
 class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Core\SingletonInterface {
 
     /**
+     * If to use the feupload integration.
+     * @var bool
+     */
+    private $useFeupload = false;
+
+    /**
      * The extension key.
      * @var string
      */
@@ -88,26 +94,10 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
     }
 
     /**
-     * Returns all local files from the given folder.
-     * @param $folder
+     * Returns all files from Dropbox.
      * @return array
      */
-    private function getLocalFiles($folder) {
-        $filesLocal = array();
-        foreach (scandir($folder) as $element) {
-            // TODO join paths system independantly!
-            if (!is_dir($folder . '/' . $element)) {
-                $filesLocal[] = '/' . $element;
-            }
-        }
-        return $filesLocal;
-    }
-
-    /**
-     * Returns all remote files.
-     * @return array
-     */
-    private function getRemoteFiles() {
+    private function getDropboxFiles() {
         $filesRemote = array();
         $dropboxContent = $this->getClient()->getMetadataWithChildren('/');
         foreach ($dropboxContent['contents'] as $element) {
@@ -124,12 +114,13 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
      * @param $files
      * @return array
      */
-    private function uploadFiles($folder, $files) {
+    private function uploadFilesToDropbox($folder, $files) {
         $results = array();
 
         // upload each file
         foreach ($files as $file) {
             try {
+                // TODO join paths system independantly!
                 $fileHandle = fopen($folder . '/' . $file, 'rb');
                 $this->getClient()->uploadFile('/' . $file, \Dropbox\WriteMode::add(), $fileHandle);
                 fclose($fileHandle);
@@ -151,7 +142,7 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
      * @param $files
      * @return array
      */
-    private function downloadFiles($folder, $files) {
+    private function downloadFilesFromDropbox($folder, $files) {
         $results = array();
 
         // download each file
@@ -173,17 +164,124 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
     }
 
     /**
-     * Logs transfer actions to syslog.
-     * @param $type
-     * @param $results
+     * Delete the given files on Dropbox side.
+     * @param array $files
+     * @return array
      */
-    private function logTransfers($type, $results) {
-        foreach ($results as $file => $state) {
-            \TYPO3\CMS\Core\Utility\GeneralUtility::sysLog(
-                $type . ' of ' . $file . ' ' . ($state ? 'was successfull' : 'failed'),
-                $this->extensionKey
-            );
+    private function deleteFilesInDropbox($files) {
+        $results = array();
+
+        foreach ($files as $file) {
+            try {
+                $this->getClient()->delete($file);
+                $results[$file] = true;
+            } catch (\Dropbox\Exception $e) {
+                $results[$file] = false;
+            }
         }
+
+        // write success/fail states to syslog
+        $this->logTransfers('Deletion', $results);
+
+        return $results;
+    }
+
+    /**
+     * Returns all local files from the given folder.
+     * @param $folder
+     * @return array
+     */
+    private function getTypo3Files($folder) {
+        $filesLocal = array();
+        foreach (scandir($folder) as $element) {
+            // TODO join paths system independantly!
+            if (!is_dir($folder . '/' . $element)) {
+                $filesLocal[] = '/' . $element;
+            }
+        }
+        return $filesLocal;
+    }
+
+    /**
+     * Deletes the given files in the given folder if they exist.
+     * @param string $folder
+     * @param array $files
+     */
+    private function deleteFilesInTypo3($folder, $files) {
+        foreach ($files as $file) {
+            // TODO join paths system independantly!
+            $pathFile = $folder . '/' . $file;
+            if (file_exists($pathFile)) {
+                // TODO if feupload integration, first delete feupload record!
+                unlink($pathFile);
+            }
+        }
+    }
+
+    /**
+     * Returns a diff with added and deleted files from the perspective of $fileMaster.
+     * @param array $filesMaster
+     * @param array $filesSlave
+     * @return array
+     */
+    private function getLocationDiff($filesMaster, $filesSlave) {
+        return array(
+            'added' => array_diff($filesMaster, $filesSlave),
+            'deleted' => array_diff($filesSlave, $filesMaster)
+        );
+    }
+
+    /**
+     * Will synchronize the configured folder with the Dropbox content.
+     * @return bool
+     */
+    public function synchronize() {
+        // initialize prerequisites
+        $this->loadTypoScript();
+        $folderTypo3 = PATH_site . $this->configuration['syncFolder'];
+        $this->ensureLocalFolderExistence($folderTypo3);
+        $this->useFeupload = array_key_exists('feupload.', $this->configuration);
+        $masterSide = $this->configuration['master'];
+
+        // get all local files
+        $filesTypo3 = $this->getTypo3Files($folderTypo3);
+        // get all remote files
+        $filesDropbox = $this->getDropboxFiles();
+
+        // fetch files to create and delete
+        if ($masterSide == 'dropbox') {
+            // get the file differences
+            $fileDiff = $this->getLocationDiff($filesDropbox, $filesTypo3);
+
+            // download the added files to TYPO3
+            $this->downloadFilesFromDropbox($folderTypo3, $fileDiff['added']);
+
+            // delete the removed files in TYPO3
+            $this->deleteFilesInTypo3($folderTypo3, $fileDiff['deleted']);
+        } else if ($masterSide == 'typo3') {
+            // get the file differences
+            $fileDiff = $this->getLocationDiff($filesTypo3, $filesDropbox);
+
+            // upload the added files to Dropbox
+            $this->uploadFilesToDropbox($folderTypo3, $fileDiff['added']);
+
+            // delete the removed files in Dropbox
+            $this->deleteFilesInDropbox($fileDiff['deleted']);
+        } else {
+            // get the file diff from the perspective of each side. The returned "deleted" elements are the ones that
+            // are missing on this side and thus shall be created.
+            $fileDiffDropbox = $this->getLocationDiff($filesDropbox, $filesTypo3);
+            $fileDiffTypo3 = $this->getLocationDiff($filesTypo3, $filesDropbox);
+
+            // upload TYPO3 files not in Dropbox
+            $this->uploadFilesToDropbox($folderTypo3, $fileDiffDropbox['deleted']);
+
+            // download Dropbox files not in TYPO3
+            $this->downloadFilesFromDropbox($folderTypo3, $fileDiffTypo3['deleted']);
+        }
+
+        // we will never fail!
+        return true;
     }
 
     /**
@@ -240,51 +338,6 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
     }
 
     /**
-     * Will synchronize the configured folder with the Dropbox content.
-     * @return bool
-     */
-    public function synchronize() {
-        // initialize prerequisites
-        $this->loadTypoScript();
-        $folderTypo3 = PATH_site . $this->configuration['syncFolder'];
-        $this->ensureLocalFolderExistence($folderTypo3);
-        $useFeupload = array_key_exists('feupload.', $this->configuration);
-
-        // get all local files
-        $filesTypo3 = $this->getLocalFiles($folderTypo3);
-        // get all remote files
-        $filesDropbox = $this->getRemoteFiles();
-
-        // check if there are local files that do not exist remote
-        $filesToUpload = array();
-        foreach ($filesTypo3 as $file) {
-            if (!in_array($file, $filesDropbox)) {
-                $filesToUpload[] = $file;
-            }
-        }
-
-        // check if there are remote files that do not exist locally
-        $fileToDownload = array();
-        foreach ($filesDropbox as $file) {
-            if (!in_array(substr($file, 1), $filesTypo3)) {
-                $fileToDownload[] = $file;
-            }
-        }
-
-        // do the synchronization
-        $uploadedFiles = $this->uploadFiles($folderTypo3, $filesToUpload);
-        $downloadedFiles = $this->downloadFiles($folderTypo3, $fileToDownload);
-
-        // if the felogin part is enabled, sync the files to this extension
-        if ($useFeupload) {
-            $this->syncWithFeUploadExtension($folderTypo3, array_merge($uploadedFiles, $downloadedFiles));
-        }
-
-        // we will never fail!
-        return true;
-    }
-
-    /**
      * Will authorize a dropbox app to access a dropbox account.
      * @param $key
      * @param $secret
@@ -314,6 +367,20 @@ class Tx_DropboxSynchronization_Service_DropboxService implements \TYPO3\CMS\Cor
             echo "Finally set this accessToken to your general page TypoScript setup for the extension and disable this page:<br />";
             echo "<pre>plugin.tx_dropboxsynchronization.settings.accessToken = " . $accessToken . "</pre>";
             echo "</p>";
+        }
+    }
+
+    /**
+     * Logs transfer actions to syslog.
+     * @param $type
+     * @param $results
+     */
+    private function logTransfers($type, $results) {
+        foreach ($results as $file => $state) {
+            \TYPO3\CMS\Core\Utility\GeneralUtility::sysLog(
+                $type . ' of ' . $file . ' ' . ($state ? 'was successfull' : 'failed'),
+                $this->extensionKey
+            );
         }
     }
 }

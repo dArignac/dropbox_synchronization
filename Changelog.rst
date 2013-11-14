@@ -1,3 +1,9 @@
+0.3.0
+-----
+
+- added master side to allow synchronization from the perspective of TYPO3 or Dropbox
+- some internal code refactoring
+
 0.2.1
 -----
 

@@ -33,7 +33,7 @@ It should be a *Dropbox API app* with *Files and datastores* and you probably wa
 :scale: 50%
     :alt: Dropbox app creation
 
-    This app will be used to access the files of a Dropbox account.
+        This app will be used to access the files of a Dropbox account.
 
 Authorize the App
 -----------------
@@ -112,12 +112,26 @@ First, insert the TypoScript setup as include in your page template and/or confi
             accessToken = ACCESS_TOKEN
             # the folder to synchronize
             syncFolder = fileadmin/user_upload/dropbox
+            # specify the master: "typo3", "dropbox" or "none"
+            master = none
         }
     }
 
 
 Then add a new scheduled task in TYPO3 backend (needs system extension *scheduler* to be installed) with Class *Dropbox Synchronization Task*.
 ...and you're set up!
+
+
+Select the master side
+----------------------
+
+As seen above, you can specify a "master" that defaults to "none".
+
+The master specifies the side, either TYPO3 or Dropbox, from which the synchronization will be handled.
+
+If you delete a file on the master side, it will be deleted on the other side, too. If you delete a file on the non-master side, it will not be deleted on the master and thus be recreated on the next synchronization.
+
+If you set master to "none", no files will be deleted, the synchronization will try to create all files on both sides.
 
 
 feupload Integration
