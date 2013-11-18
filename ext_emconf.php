@@ -12,7 +12,7 @@
 
 $EM_CONF[$_EXTKEY] = array(
     'title' => 'Dropbox Synchronization',
-    'description' => 'Synchronizes a Dropbox folder with a local TYPO3 folder.',
+    'description' => 'Synchronizes a Dropbox folder with a local TYPO3 folder. Uses Dropbox Core API 1.1.1',
     'category' => 'misc',
     'author' => 'Alexander Herrmann',
     'author_email' => 'typo3@amnell.de',
